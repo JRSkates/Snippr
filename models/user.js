@@ -1,10 +1,13 @@
 const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const path = require('path');
+require('dotenv').config();
 
-// Load the user data from the JSON file
+const JWT_SECRET = process.env.JWT_SECRET; // JWT secret key from .env file
 const filePath = path.join(__dirname, '../data/users.json');
-let users = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+
+let users = JSON.parse(fs.readFileSync(filePath, 'utf-8') || '[]');
 let nextUserId = users.length > 0 ? users[users.length - 1].id + 1 : 1;
 
 // Helper function to save users to the JSON file
@@ -29,13 +32,32 @@ function getUserByEmail(email) {
   return users.find(user => user.email === email);
 }
 
-// Verify user credentials
-async function verifyUser(email, password) {
+// Authenticate a user and return a JWT
+async function authenticateUser(email, password) {
   const user = getUserByEmail(email);
-  if (!user) return false;
+  if (!user) return null; // User not found
 
   const isMatch = await bcrypt.compare(password, user.password);
-  return isMatch ? { id: user.id, email: user.email } : null;
+  if (!isMatch) return null; // Password mismatch
+
+  // Generate a JWT for the user
+  const token = jwt.sign(
+    { id: user.id, email: user.email }, // Payload
+    JWT_SECRET, // Secret key
+    { expiresIn: '24h' } // Token expiration time
+  );
+
+  return token;
 }
 
-module.exports = { addUser, getUserByEmail, verifyUser };
+// Verify a JWT token
+function verifyToken(token) {
+  try {
+    // Decode and verify the token using the secret key
+    return jwt.verify(token, JWT_SECRET);
+  } catch (err) {
+    return null; // Token is invalid or expired
+  }
+}
+
+module.exports = { addUser, getUserByEmail, authenticateUser, verifyToken };
